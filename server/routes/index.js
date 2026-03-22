@@ -3,9 +3,13 @@ const dishesRoutes = require('./dishes');
 const ordersRoutes = require('./orders');
 const paymentRoutes = require('./payment');
 const authRoutes = require('./auth');
+const healthRoutes = require('./health');
 const { authenticateToken } = require('./auth');
 
 module.exports = (app) => {
+  // 健康检查路由（无需登录）
+  app.use('/api/health', healthRoutes);
+
   // 认证路由（无需登录）
   app.use('/api/auth', authRoutes);
 
