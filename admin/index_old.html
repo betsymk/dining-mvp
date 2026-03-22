@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H5点餐系统 - 管理后台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            min-height: 100vh;
+            background: #f5f7fa;
+        }
+
+        /* 左侧导航 */
+        .sidebar {
+            width: 220px;
+            background: #304156;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .logo {
+            padding: 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .nav-items {
+            flex: 1;
+            padding: 10px 0;
+        }
+
+        .nav-item {
+            padding: 15px 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .nav-item.active {
+            background: #409EFF;
+        }
+
+        .nav-item span {
+            font-size: 14px;
+        }
+
+        /* 右侧内容区 */
+        .main-content {
+            margin-left: 220px;
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .page-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #303133;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #909399;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #409EFF;
+        }
+
+        .stat-value.revenue {
+            color: #67C23A;
+        }
+
+        /* 表格样式 */
+        .table-container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .toolbar {
+            padding: 15px 20px;
+            border-bottom: 1px solid #EBEEF5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #409EFF;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #66B1FF;
+        }
+
+        .btn-success {
+            background: #67C23A;
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #85CE61;
+        }
+
+        .btn-danger {
+            background: #F56C6C;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #F78989;
+        }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 12px;
+        }
+
+        .filter-btn {
+            padding: 6px 15px;
+            background: #ECF5FF;
+            color: #409EFF;
+            border: 1px solid #B3D8FF;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 10px;
+            border-radius: 4px;
+        }
+
+        .filter-btn.active {
+            background: #409EFF;
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #F5F7FA;
+        }
+
+        th, td {
+            padding: 12px 20px;
+            text-align: left;
+            border-bottom: 1px solid #EBEEF5;
+        }
+
+        th {
+            font-weight: 600;
+            color: #909399;
+            font-size: 14px;
+        }
+
+        td {
+            font-size: 14px;
+            color: #606266;
+        }
+
+        tr:hover {
+            background: #F5F7FA;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .status-badge.new {
+            background: #F0F9FF;
+            color: #409EFF;
+        }
+
+        .status-badge.done {
+            background: #F0F9FF;
+            color: #67C23A;
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #fff;
+            border-radius: 8px;
+            padding: 25px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #606266;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #DCDFE6;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #409EFF;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .price {
+            color: #F56C6C;
+            font-weight: bold;
+        }
+
+        .dish-image {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #F5F7FA;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 加载提示 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #909399;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #909399;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧导航 -->
+    <div class="sidebar">
+        <div class="logo">📊 点餐系统后台</div>
+        <div class="nav-items">
+            <div class="nav-item active" data-page="dashboard">
+                <span>📈 数据统计</span>
+            </div>
+            <div class="nav-item" data-page="dishes">
+                <span>🍲 菜品管理</span>
+            </div>
+            <div class="nav-item" data-page="orders">
+                <span>📋 订单管理</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧内容 -->
+    <div class="main-content">
+        <!-- 数据统计页 -->
+        <div id="dashboard" class="page active">
+            <h1 class="page-title">数据统计</h1>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">今日单量</div>
+                    <div class="stat-value" id="todayOrders">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">今日营收</div>
+                    <div class="stat-value revenue" id="todayRevenue">¥0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 菜品管理页 -->
+        <div id="dishes" class="page">
+            <h1 class="page-title">菜品管理</h1>
+            <div class="table-container">
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="showDishModal()">➕ 添加菜品</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>图片</th>
+                            <th>名称</th>
+                            <th>价格</th>
+                            <th>分类</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dishesTable">
+                        <tr><td colspan="6" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 订单管理页 -->
+        <div id="orders" class="page">
+            <h1 class="page-title">订单管理</h1>
+            <div class="table-container">
+                <div class="toolbar">
+                    <div>
+                        <button class="filter-btn active" onclick="filterOrders('new')">新订单</button>
+                        <button class="filter-btn" onclick="filterOrders('done')">已完成</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>订单号</th>
+                            <th>桌号</th>
+                            <th>内容</th>
+                            <th>总价</th>
+                            <th>状态</th>
+                            <th>手机号</th>
+                            <th>下单时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersTable">
+                        <tr><td colspan="8" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 菜品编辑模态框 -->
+    <div id="dishModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" id="dishModalTitle">添加菜品</div>
+            <form id="dishForm">
+                <input type="hidden" id="dishId">
+                <div class="form-group">
+                    <label>菜品名称</label>
+                    <input type="text" id="dishName" required>
+                </div>
+                <div class="form-group">
+                    <label>价格（元）</label>
+                    <input type="number" id="dishPrice" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="dishDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>图片URL</label>
+                    <input type="text" id="dishImageUrl" placeholder="/images/dish.jpg">
+                </div>
+                <div class="form-group">
+                    <label>分类</label>
+                    <select id="dishCategory" required>
+                        <option value="0">到店</option>
+                        <option value="1">外卖</option>
+                        <option value="2">预制菜</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>状态</label>
+                    <select id="dishStatus" required>
+                        <option value="1">上架</option>
+                        <option value="0">下架</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeDishModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 当前页面
+        let currentPage = 'dashboard';
+
+        // 当前订单过滤器
+        let currentOrderFilter = 'new';
+
+        // 导航切换
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+
+                const page = item.dataset.page;
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById(page).classList.add('active');
+
+                currentPage = page;
+
+                // 加载数据
+                if (page === 'dashboard') {
+                    loadStats();
+                } else if (page === 'dishes') {
+                    loadDishes();
+                } else if (page === 'orders') {
+                    loadOrders();
+                }
+            });
+        });
+
+        // 加载统计数据
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/orders/stats/today');
+                if (!response.ok) throw new Error('获取统计数据失败');
+
+                const data = await response.json();
+                document.getElementById('todayOrders').textContent = data.count || 0;
+                document.getElementById('todayRevenue').textContent = '¥' + (data.revenue || 0).toFixed(2);
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+                document.getElementById('todayOrders').textContent = '0';
+                document.getElementById('todayRevenue').textContent = '¥0.00';
+            }
+        }
+
+        // 加载菜品列表
+        async function loadDishes() {
+            try {
+                const response = await fetch('/api/dishes');
+                if (!response.ok) throw new Error('获取菜品列表失败');
+
+                const dishes = await response.json();
+                const tbody = document.getElementById('dishesTable');
+
+                if (!dishes || dishes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无菜品数据</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = dishes.map(dish => `
+                    <tr>
+                        <td><img src="${dish.image_url}" alt="${dish.name}" class="dish-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍽️</text></svg>'"></td>
+                        <td><strong>${dish.name}</strong><br><small style="color:#909399">${dish.description || '-'}</small></td>
+                        <td class="price">¥${parseFloat(dish.price).toFixed(2)}</td>
+                        <td>${getCategoryName(dish.category)}</td>
+                        <td><span class="status-badge ${dish.status === 1 ? 'done' : 'new'}">${dish.status === 1 ? '上架' : '下架'}</span></td>
+                        <td>
+                            <button class="btn btn-sm" onclick="editDish(${dish.id})">编辑</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteDish(${dish.id})">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('加载菜品列表失败:', error);
+                document.getElementById('dishesTable').innerHTML = '<tr><td colspan="6" class="empty">加载失败</td></tr>';
+            }
+        }
+
+        // 获取分类名称
+        function getCategoryName(category) {
+            const names = {0: '到店', 1: '外卖', 2: '预制菜'};
+            return names[category] || '未知';
+        }
+
+        // 显示菜品模态框
+        function showDishModal(dish = null) {
+            const modal = document.getElementById('dishModal');
+            const title = document.getElementById('dishModalTitle');
+            const form = document.getElementById('dishForm');
+
+            if (dish) {
+                title.textContent = '编辑菜品';
+                document.getElementById('dishId').value = dish.id;
+                document.getElementById('dishName').value = dish.name;
+                document.getElementById('dishPrice').value = dish.price;
+                document.getElementById('dishDescription').value = dish.description || '';
+                document.getElementById('dishImageUrl').value = dish.image_url || '';
+                document.getElementById('dishCategory').value = dish.category;
+                document.getElementById('dishStatus').value = dish.status;
+            } else {
+                title.textContent = '添加菜品';
+                form.reset();
+                document.getElementById('dishId').value = '';
+            }
+
+            modal.classList.add('show');
+        }
+
+        // 关闭菜品模态框
+        function closeDishModal() {
+            document.getElementById('dishModal').classList.remove('show');
+        }
+
+        // 编辑菜品
+        async function editDish(id) {
+            try {
+                const response = await fetch(`/api/dishes/${id}`);
+                if (!response.ok) throw new Error('获取菜品信息失败');
+
+                const dish = await response.json();
+                showDishModal(dish);
+            } catch (error) {
+                console.error('编辑菜品失败:', error);
+                alert('编辑菜品失败');
+            }
+        }
+
+        // 删除菜品
+        async function deleteDish(id) {
+            if (!confirm('确认删除该菜品吗？')) return;
+
+            try {
+                const response = await fetch(`/api/dishes/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('删除菜品失败');
+
+                alert('删除成功');
+                loadDishes();
+            } catch (error) {
+                console.error('删除菜品失败:', error);
+                alert('删除失败');
+            }
+        }
+
+        // 菜品表单提交
+        document.getElementById('dishForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const dishId = document.getElementById('dishId').value;
+            const data = {
+                name: document.getElementById('dishName').value,
+                price: parseFloat(document.getElementById('dishPrice').value),
+                description: document.getElementById('dishDescription').value,
+                image_url: document.getElementById('dishImageUrl').value,
+                category: parseInt(document.getElementById('dishCategory').value),
+                status: parseInt(document.getElementById('dishStatus').value)
+            };
+
+            try {
+                const url = dishId ? `/api/dishes/${dishId}` : '/api/dishes';
+                const method = dishId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) throw new Error('保存菜品失败');
+
+                alert('保存成功');
+                closeDishModal();
+                loadDishes();
+            } catch (error) {
+                console.error('保存菜品失败:', error);
+                alert('保存失败');
+            }
+        });
+
+        // 加载订单列表
+        async function loadOrders() {
+            try {
+                const response = await fetch(`/api/orders?status=${currentOrderFilter}`);
+                if (!response.ok) throw new Error('获取订单列表失败');
+
+                const orders = await response.json();
+                const tbody = document.getElementById('ordersTable');
+
+                if (!orders || orders.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="empty">暂无${currentOrderFilter === 'new' ? '新' : '已完成'}订单</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = orders.map(order => {
+                    const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+                    const itemsText = items.map(item => `${item.name} x${item.quantity}`).join(', ');
+
+                    return `
+                        <tr>
+                            <td>#${order.id}</td>
+                            <td><strong>${order.table_id || '外卖'}</strong></td>
+                            <td><small>${itemsText}</small></td>
+                            <td class="price">¥${parseFloat(order.total_price).toFixed(2)}</td>
+                            <td><span class="status-badge ${order.status}">${order.status === 'new' ? '新订单' : '已完成'}</span></td>
+                            <td>${order.customer_phone || '-'}</td>
+                            <td><small>${formatTime(order.created_at)}</small></td>
+                            <td>
+                                ${order.status === 'new' ? `<button class="btn btn-sm btn-success" onclick="completeOrder(${order.id})">完成</button>` : '-'}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('加载订单列表失败:', error);
+                document.getElementById('ordersTable').innerHTML = '<tr><td colspan="8" class="empty">加载失败</td></tr>';
+            }
+        }
+
+        // 订单筛选
+        function filterOrders(status) {
+            currentOrderFilter = status;
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes(status === 'new' ? '新订单' : '已完成')) {
+                    btn.classList.add('active');
+                }
+            });
+
+            loadOrders();
+        }
+
+        // 完成订单
+        async function completeOrder(id) {
+            if (!confirm('确认完成此订单吗？')) return;
+
+            try {
+                const response = await fetch(`/api/orders/${id}/complete`, {
+                    method: 'PUT'
+                });
+
+                if (!response.ok) throw new Error('完成订单失败');
+
+                alert('订单已完成');
+                loadOrders();
+                loadStats(); // 刷新统计数据
+            } catch (error) {
+                console.error('完成订单失败:', error);
+                alert('完成失败');
+            }
+        }
+
+        // 格式化时间
+        function formatTime(timeStr) {
+            const date = new Date(timeStr);
+            const now = new Date();
+            const diff = now - date;
+
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+
+            return date.toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 初始加载
+        loadStats();
+
+        // 定时刷新统计数据（每30秒）
+        setInterval(() => {
+            if (currentPage === 'dashboard') {
+                loadStats();
+            } else if (currentPage === 'orders') {
+                loadOrders();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
