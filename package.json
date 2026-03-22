@@ -1,0 +1,20 @@
+{
+  "name": "dining-mvp",
+  "version": "1.0.0",
+  "description": "H5点餐系统MVP - 轻量级到店扫码点餐系统",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["dining", "h5", "order", "restaurant"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}
