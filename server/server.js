@@ -1,4 +1,5 @@
 // H5点餐系统 - 服务器主文件
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
 const bodyparser = require('body-parser');
 const cors = require('cors');

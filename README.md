@@ -3,7 +3,7 @@
 轻量级餐厅扫码点餐系统，支持顾客H5网页下单、商家后台管理订单。
 
 **最新版本**: v1.1.0
-**更新**: 添加管理后台登录认证功能 ✨
+**更新**: 添加支付集成、打印支持、实时通知功能 ✨
 
 ## 功能特性
 
@@ -11,13 +11,17 @@
 - 📱 扫码进入点餐（URL参数带桌号 `?table=A01`）
 - 🍽️ 菜单浏览（支持分类筛选：到店/外卖/预制菜）
 - 🛒 购物车管理
-- 💳 模拟支付
-- 📋 订单状态查询
+- 💳 **真实支付集成**（微信支付、支付宝支付）
+- 📋 订单状态查询（实时更新）
+- 🔔 **实时通知**（订单状态变更推送）
 
 ### 商家管理后台
 - 🔐 **用户认证**（JWT登录、权限管理）
 - 📦 菜品管理（增删改查、上下架）
 - 📋 订单管理（新订单/已完成、一键完成）
+- 🖨️ **打印支持**（厨房小票、收银小票自动打印）
+- 💳 **支付管理**（支付状态监控、退款处理）
+- 🔔 **实时通知**（新订单提醒、支付成功通知）
 - 📊 数据统计（今日单量、营收）
 
 ## 技术栈
@@ -63,7 +67,23 @@ cp .env.example .env
 
 # JWT认证配置（必须修改为强密码）
 JWT_SECRET=your_strong_secret_key_here
+
+# 支付配置（可选，用于真实支付）
+# WECHAT_APPID=your_wechat_appid
+# WECHAT_MCHID=your_wechat_mchid
+# WECHAT_APIV3_KEY=your_wechat_apiv3_key
+# ALIPAY_APPID=your_alipay_appid
+
+# 打印机配置（可选，用于自动打印）
+# PRINTER_TYPE=escpos
+# PRINTER_CONNECTION=network
+# PRINTER_IP=192.168.1.100
+# PRINTER_PORT=9100
 ```
+
+**详细配置说明**:
+- 支付集成配置请参考 [`PAYMENT_INTEGRATION.md`](PAYMENT_INTEGRATION.md)
+- 打印机配置请参考 [`PRINTER_SETUP.md`](PRINTER_SETUP.md)
 
 ### 5. 初始化管理员账户
 
@@ -168,6 +188,20 @@ npm start
 
 ### 支付相关
 - `POST /api/pay/mock` - 模拟支付
+- `POST /api/pay/create-order` - 创建真实支付订单（微信/支付宝）
+- `GET /api/pay/status/{paymentId}` - 查询支付状态
+- `POST /api/pay/notify` - 支付回调处理
+
+### 打印相关（需认证）🔐
+- `POST /api/print/order` - 打印订单（厨房/收银小票）
+- `GET /api/print/status` - 获取打印机状态
+- `POST /api/print/test` - 打印测试页
+- `POST /api/print/config` - 配置打印机
+
+### 实时通知（WebSocket）
+- `ws://localhost:3000/ws/notifications` - 实时通知连接
+- 自动推送：新订单、支付成功、订单完成
+- 支持多设备同步通知
 
 ## 项目结构
 
@@ -176,14 +210,31 @@ dining-mvp/
 ├── server/
 │   ├── server.js          # 服务器入口
 │   ├── database.js        # 数据库连接
+│   ├── websocket.js       # WebSocket实时通知
+│   ├── payment/           # 支付集成模块
+│   │   ├── wechat.js      # 微信支付实现
+│   │   ├── alipay.js      # 支付宝支付实现
+│   │   └── index.js       # 支付统一接口
+│   ├── printer/           # 打印支持模块
+│   │   ├── escpos.js      # ESC/POS打印机实现
+│   │   ├── cups.js        # CUPS打印机实现
+│   │   └── index.js       # 打印统一接口
 │   └── routes/
 │       ├── index.js       # 路由入口
 │       ├── dishes.js      # 菜品路由
 │       ├── orders.js      # 订单路由
-│       └── payment.js     # 支付路由
+│       ├── payment.js     # 支付路由
+│       └── printer.js     # 打印路由
 ├── client/                # 顾客端H5页面
 ├── admin/                 # 管理后台页面
-├── init.sql              # 数据库数据库初始化脚本
+├── certs/                 # 支付证书目录
+├── scripts/               # 工具脚本
+│   ├── test-printer.js    # 打印机测试脚本
+│   └── init-admin.js      # 管理员初始化
+├── templates/             # 打印模板
+├── migrations/            # 数据库迁移
+│   └── add_admin_table.sql
+├── init.sql              # 数据库初始化脚本
 ├── package.json          # 项目配置
 └── README.md             # 项目说明
 ```
@@ -232,12 +283,27 @@ cloudflared tunnel run
 
 ## 版本历史
 
-### v1.1.0 (2026-03-22)
+### v1.1.0 (2026-03-24)
 - ✅ **管理后台登录认证**
   - JWT token 认证系统
   - bcrypt 密码加密
   - 管理员登录/登出
   - 角色权限管理（admin、super_admin）
+- ✅ **支付集成**
+  - 微信支付（Native/JSAPI）
+  - 支付宝支付（PC/手机网站支付）
+  - 支付状态回调处理
+  - 支付安全验证
+- ✅ **打印支持**
+  - ESC/POS热敏打印机支持
+  - 厨房小票自动打印
+  - 收银小票打印
+  - 多种连接方式（网络/USB/蓝牙）
+- ✅ **实时通知**
+  - WebSocket实时推送
+  - 新订单提醒
+  - 支付成功通知
+  - 订单状态变更同步
 - ✅ 安全性提升
   - API路由保护
   - Token自动验证
