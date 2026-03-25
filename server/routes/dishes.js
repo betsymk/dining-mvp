@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
+const { eventTracker } = require('../middleware/eventTracker');
 
 // 获取所有菜品
 router.get('/', async (req, res) => {

@@ -2,17 +2,40 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../database');
+const { eventTracker } = require('../middleware/eventTracker');
 
 // 获取所有订单
 router.get('/', async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, order_type, user_id } = req.query;
     let query = 'SELECT * FROM orders ORDER BY created_at DESC';
     const params = [];
+    let paramIndex = 1;
 
     if (status) {
-      query = 'SELECT * FROM orders WHERE status = $1 ORDER BY created_at DESC';
+      query = `SELECT * FROM orders WHERE status = $${paramIndex} ORDER BY created_at DESC`;
       params.push(status);
+      paramIndex++;
+    }
+
+    if (order_type && !status) {
+      query = `SELECT * FROM orders WHERE order_type = $${paramIndex} ORDER BY created_at DESC`;
+      params.push(order_type);
+      paramIndex++;
+    } else if (order_type && status) {
+      query = `SELECT * FROM orders WHERE status = $1 AND order_type = $${paramIndex} ORDER BY created_at DESC`;
+      params.push(status, order_type);
+      paramIndex++;
+    }
+
+    if (user_id) {
+      if (params.length === 0) {
+        query = `SELECT * FROM orders WHERE user_id = $${paramIndex} ORDER BY created_at DESC`;
+      } else {
+        const whereClause = query.includes('WHERE') ? ' AND' : ' WHERE';
+        query = query.replace(/ORDER BY/, `${whereClause} user_id = $${paramIndex} ORDER BY`);
+      }
+      params.push(user_id);
     }
 
     const result = await pool.query(query, params);
@@ -34,7 +57,9 @@ router.get('/stats/today', async (req, res) => {
         COUNT(*) as total_orders,
         COALESCE(SUM(total_price), 0) as total_revenue,
         COUNT(*) FILTER (WHERE status = 'new') as new_orders,
-        COUNT(*) FILTER (WHERE status = 'done') as completed_orders
+        COUNT(*) FILTER (WHERE status = 'done') as completed_orders,
+        COUNT(*) FILTER (WHERE order_type = 'dineIn') as dine_in_orders,
+        COUNT(*) FILTER (WHERE order_type = 'takeout') as takeout_orders
       FROM orders
       WHERE created_at >= $1
     `;
@@ -67,27 +92,109 @@ router.get('/:id', async (req, res) => {
 // 创建订单
 router.post('/', async (req, res) => {
   try {
-    const { table_id, items, total_price, customer_phone, order_type } = req.body;
+    const { 
+      table_id, 
+      items, 
+      total_price, 
+      customer_phone, 
+      order_type = 'dineIn',
+      user_id,
+      restaurant_id,
+      delivery_address,
+      delivery_fee = 0,
+      estimated_delivery_time
+    } = req.body;
 
-    if (!table_id || !items || items.length === 0 || !total_price) {
+    // 验证必填字段
+    if (!items || items.length === 0 || !total_price) {
       return res.status(400).json({ success: false, message: '订单信息不完整' });
     }
 
-    const query = `
-      INSERT INTO orders (table_id, items, total_price, customer_phone, order_type)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `;
+    // 验证订单类型
+    if (order_type !== 'dineIn' && order_type !== 'takeout') {
+      return res.status(400).json({ success: false, message: '无效的订单类型' });
+    }
 
+    // 外卖订单验证
+    if (order_type === 'takeout') {
+      if (!user_id) {
+        return res.status(400).json({ success: false, message: '外卖订单需要用户ID' });
+      }
+      if (!restaurant_id) {
+        return res.status(400).json({ success: false, message: '外卖订单需要餐厅ID' });
+      }
+      if (!delivery_address) {
+        return res.status(400).json({ success: false, message: '外卖订单需要配送地址' });
+      }
+    }
+
+    // 堂食订单验证
+    if (order_type === 'dineIn') {
+      if (!table_id) {
+        return res.status(400).json({ success: false, message: '堂食订单需要桌号' });
+      }
+    }
+
+    // 构建查询语句
+    const columns = [
+      'items', 
+      'total_price', 
+      'customer_phone', 
+      'order_type'
+    ];
     const values = [
-      table_id,
       JSON.stringify(items),
       total_price,
       customer_phone || '',
-      order_type !== undefined ? order_type : 0
+      order_type
     ];
+    let placeholders = ['$1', '$2', '$3', '$4'];
+    let paramIndex = 5;
+
+    // 添加堂食特定字段
+    if (order_type === 'dineIn') {
+      columns.push('table_id');
+      values.push(table_id);
+      placeholders.push(`$${paramIndex}`);
+      paramIndex++;
+    }
+
+    // 添加外卖特定字段
+    if (order_type === 'takeout') {
+      columns.push('user_id', 'restaurant_id', 'delivery_address', 'delivery_fee');
+      values.push(user_id, restaurant_id, JSON.stringify(delivery_address), delivery_fee);
+      placeholders.push(`$${paramIndex}`, `$${paramIndex + 1}`, `$${paramIndex + 2}`, `$${paramIndex + 3}`);
+      paramIndex += 4;
+
+      if (estimated_delivery_time) {
+        columns.push('estimated_delivery_time');
+        values.push(estimated_delivery_time);
+        placeholders.push(`$${paramIndex}`);
+      }
+    }
+
+    const query = `
+      INSERT INTO orders (${columns.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      RETURNING *
+    `;
 
     const result = await pool.query(query, values);
+    
+    // 记录订单创建事件
+    eventTracker.trackBusinessEvent('order_created', user_id || null, {
+      order_id: result.rows[0].id,
+      table_id: table_id,
+      total_price: total_price,
+      item_count: items.length,
+      order_type: order_type,
+      items: items.map(item => ({
+        dish_id: item.id,
+        quantity: item.quantity,
+        price: item.price
+      }))
+    });
+    
     res.json({ success: true, data: result.rows[0], message: '订单创建成功' });
   } catch (error) {
     console.error('创建订单失败:', error);
@@ -117,11 +224,59 @@ router.put('/:id/status', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: '订单不存在' });
     }
+    
+    // 记录订单状态更新事件
+    eventTracker.trackBusinessEvent('order_updated', null, {
+      order_id: id,
+      old_status: result.rows[0].status,
+      new_status: status,
+      update_type: 'status'
+    });
 
     res.json({ success: true, data: result.rows[0], message: '订单状态更新成功' });
   } catch (error) {
     console.error('更新订单状态失败:', error);
     res.status(500).json({ success: false, message: '更新订单状态失败' });
+  }
+});
+
+// 更新外卖订单配送状态
+router.put('/:id/delivery-status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { delivery_status, actual_delivery_time } = req.body;
+
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'pickedUp', 'delivered', 'cancelled'];
+    if (!delivery_status || !validStatuses.includes(delivery_status)) {
+      return res.status(400).json({ success: false, message: '无效的配送状态' });
+    }
+
+    let query = `
+      UPDATE orders
+      SET delivery_status = $1, updated_at = CURRENT_TIMESTAMP
+    `;
+    const params = [delivery_status];
+
+    if (delivery_status === 'delivered' && actual_delivery_time) {
+      query += ', actual_delivery_time = $2';
+      params.push(actual_delivery_time);
+    } else if (delivery_status === 'delivered') {
+      query += ', actual_delivery_time = CURRENT_TIMESTAMP';
+    }
+
+    query += ' WHERE id = $' + (params.length + 1) + ' RETURNING *';
+    params.push(id);
+
+    const result = await pool.query(query, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: '订单不存在' });
+    }
+
+    res.json({ success: true, data: result.rows[0], message: '配送状态更新成功' });
+  } catch (error) {
+    console.error('更新配送状态失败:', error);
+    res.status(500).json({ success: false, message: '更新配送状态失败' });
   }
 });
 
@@ -137,6 +292,13 @@ router.put('/:id/complete', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: '订单不存在' });
     }
+    
+    // 记录订单完成事件
+    eventTracker.trackBusinessEvent('order_completed', null, {
+      order_id: id,
+      total_price: result.rows[0].total_price,
+      item_count: JSON.parse(result.rows[0].items).length
+    });
 
     res.json({ success: true, data: result.rows[0], message: '订单已完成' });
   } catch (error) {

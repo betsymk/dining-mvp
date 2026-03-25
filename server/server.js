@@ -4,6 +4,7 @@ const express = require('express');
 const bodyparser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const { eventTrackingMiddleware } = require('./middleware/eventTracker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyparser.json({ limit: '10mb' }));
 app.use(bodyparser.urlencoded({ extended: true, limit: '10mb' }));
+app.use(eventTrackingMiddleware);
 
 // 静态文件服务
 app.use(express.static(path.join(__dirname, '..')));
