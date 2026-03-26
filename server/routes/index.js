@@ -5,6 +5,7 @@ const paymentRoutes = require('./payment');
 const authRoutes = require('./auth');
 const healthRoutes = require('./health');
 const addressesRoutes = require('./addresses');
+const settingsRoutes = require('./settings');
 const { authenticateToken } = require('./auth');
 
 module.exports = (app) => {
@@ -13,6 +14,9 @@ module.exports = (app) => {
 
   // 认证路由（无需登录）
   app.use('/api/auth', authRoutes);
+
+  // 系统设置路由（需要登录）
+  app.use('/api/settings', authenticateToken, settingsRoutes);
 
   // 菜品相关路由（需要登录）
   app.use('/api/dishes', authenticateToken, dishesRoutes);

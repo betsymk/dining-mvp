@@ -394,6 +394,9 @@
             <div class="nav-item" data-page="stats">
                 <span>📊 数据统计</span>
             </div>
+            <div class="nav-item" data-page="settings">
+                <span>⚙️ 系统设置</span>
+            </div>
         </div>
     </div>
 
@@ -459,6 +462,39 @@
                 <div class="stat-card">
                     <div class="stat-title">总营收</div>
                     <div class="stat-value" id="statTotalRevenue">¥0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统设置页面 -->
+        <div class="page" id="page-settings">
+            <h2 class="page-title">系统设置</h2>
+
+            <div class="table-container">
+                <h3>营业时间设置</h3>
+                <p style="margin: 10px 0 20px; color: #606266;">设置餐厅的营业时间段，非营业时间将自动关闭点餐功能</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <label class="form-label">
+                        <input type="checkbox" id="businessEnabled" style="margin-right: 8px;">
+                        启用营业时间控制
+                    </label>
+                </div>
+
+                <div id="businessHoursContainer">
+                    <!-- 营业时间段将在这里动态生成 -->
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" id="addBusinessPeriod">+ 添加营业时段</button>
+                    <button class="btn btn-success" id="saveBusinessSettings" style="margin-left: 10px;">保存设置</button>
+                </div>
+
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3>当前营业状态</h3>
+                    <div id="businessStatus" style="margin-top: 10px; font-size: 18px; font-weight: bold;">
+                        加载中...
+                    </div>
                 </div>
             </div>
         </div>
@@ -894,6 +930,169 @@
         window.addEventListener('beforeunload', () => {
             if (refreshInterval) {
                 clearInterval(refreshInterval);
+            }
+        });
+
+        // ========== 系统设置页面逻辑 ==========
+        
+        // 加载系统设置
+        async function loadSettings() {
+            try {
+                const settings = await apiRequest('/api/settings');
+                
+                // 营业时间控制开关
+                const businessEnabled = settings.is_business_enabled === true || 
+                                      settings.is_business_enabled === 'true';
+                document.getElementById('businessEnabled').checked = businessEnabled;
+                
+                // 营业时间段
+                const businessHours = Array.isArray(settings.business_hours) ? 
+                                    settings.business_hours : [];
+                renderBusinessHours(businessHours);
+                
+                // 当前营业状态
+                updateBusinessStatus();
+                
+            } catch (error) {
+                console.error('加载设置失败:', error);
+            }
+        }
+        
+        // 渲染营业时间段
+        function renderBusinessHours(hours) {
+            const container = document.getElementById('businessHoursContainer');
+            
+            if (hours.length === 0) {
+                container.innerHTML = '<div class="empty">暂无营业时间段</div>';
+                return;
+            }
+            
+            let html = '';
+            hours.forEach((period, index) => {
+                html += `
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center;">
+                        <input type="time" class="form-input" style="width: 120px;" 
+                               value="${period.start || '09:00'}" data-index="${index}" data-field="start">
+                        <span>至</span>
+                        <input type="time" class="form-input" style="width: 120px;" 
+                               value="${period.end || '21:00'}" data-index="${index}" data-field="end">
+                        <button class="btn btn-danger" onclick="removeBusinessPeriod(${index})" 
+                                style="padding: 5px 10px; font-size: 12px;">删除</button>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // 添加营业时段
+        document.getElementById('addBusinessPeriod').addEventListener('click', () => {
+            const container = document.getElementById('businessHoursContainer');
+            const currentHours = getCurrentBusinessHours();
+            
+            currentHours.push({ start: '09:00', end: '21:00' });
+            renderBusinessHours(currentHours);
+        });
+        
+        // 删除营业时段
+        window.removeBusinessPeriod = function(index) {
+            const currentHours = getCurrentBusinessHours();
+            if (currentHours.length <= 1) {
+                alert('至少需要保留一个营业时间段');
+                return;
+            }
+            
+            currentHours.splice(index, 1);
+            renderBusinessHours(currentHours);
+        };
+        
+        // 获取当前营业时间段数据
+        function getCurrentBusinessHours() {
+            const inputs = document.querySelectorAll('#businessHoursContainer input[type="time"]');
+            const periods = [];
+            let currentPeriod = {};
+            
+            inputs.forEach((input, i) => {
+                const field = input.dataset.field;
+                const periodIndex = parseInt(input.dataset.index);
+                
+                if (!periods[periodIndex]) {
+                    periods[periodIndex] = { start: '', end: '' };
+                }
+                
+                periods[periodIndex][field] = input.value;
+            });
+            
+            // 过滤掉空的时段
+            return periods.filter(period => period.start && period.end);
+        }
+        
+        // 保存营业设置
+        document.getElementById('saveBusinessSettings').addEventListener('click', async () => {
+            try {
+                const businessEnabled = document.getElementById('businessEnabled').checked;
+                const businessHours = getCurrentBusinessHours();
+                
+                // 保存营业时间控制开关
+                await apiRequest('/api/settings/is_business_enabled', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: businessEnabled })
+                });
+                
+                // 保存营业时间段
+                await apiRequest('/api/settings/business_hours', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: businessHours })
+                });
+                
+                alert('设置保存成功！');
+                updateBusinessStatus();
+                
+            } catch (error) {
+                console.error('保存设置失败:', error);
+                alert('保存失败，请重试');
+            }
+        });
+        
+        // 更新营业状态显示
+        async function updateBusinessStatus() {
+            try {
+                const status = await apiRequest('/api/settings/business-status');
+                const statusElement = document.getElementById('businessStatus');
+                
+                if (status.isBusinessHours) {
+                    statusElement.innerHTML = `<span style="color: #67c23a;">✅ ${status.message}</span>`;
+                } else {
+                    statusElement.innerHTML = `<span style="color: #f56c6c;">❌ ${status.message}</span>`;
+                }
+                
+                statusElement.innerHTML += ` (当前时间: ${status.currentTime})`;
+                
+            } catch (error) {
+                console.error('获取营业状态失败:', error);
+            }
+        }
+        
+        // 定期更新营业状态（每分钟）
+        setInterval(updateBusinessStatus, 60000);
+        
+        // 切换到设置页面时加载数据
+        // 在导航切换逻辑中添加
+        const originalNavClick = document.querySelectorAll('.nav-item')[3].onclick;
+        document.querySelectorAll('.nav-item')[3].addEventListener('click', function() {
+            // 先执行原有的导航逻辑
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            const page = this.dataset.page;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + page).classList.add('active');
+            
+            // 加载设置数据
+            if (page === 'settings') {
+                loadSettings();
             }
         });
     </script>
