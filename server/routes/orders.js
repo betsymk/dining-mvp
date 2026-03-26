@@ -28,14 +28,16 @@ router.get('/', async (req, res) => {
       paramIndex++;
     }
 
-    if (user_id) {
-      if (params.length === 0) {
-        query = `SELECT * FROM orders WHERE user_id = $${paramIndex} ORDER BY created_at DESC`;
-      } else {
-        const whereClause = query.includes('WHERE') ? ' AND' : ' WHERE';
-        query = query.replace(/ORDER BY/, `${whereClause} user_id = $${paramIndex} ORDER BY`);
-      }
+    // 添加用户ID过滤（用于外卖订单）
+    if (user_id && !status && !order_type) {
+      query = `SELECT * FROM orders WHERE user_id = $${paramIndex} ORDER BY created_at DESC`;
       params.push(user_id);
+      paramIndex++;
+    } else if (user_id && (status || order_type)) {
+      // 在现有查询基础上添加用户ID条件
+      const whereIndex = query.indexOf('WHERE') + 6;
+      query = query.slice(0, whereIndex) + `user_id = $${paramIndex} AND ` + query.slice(whereIndex);
+      params.splice(params.length - (paramIndex - 1), 0, user_id);
     }
 
     const result = await pool.query(query, params);
@@ -43,32 +45,6 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('获取订单列表失败:', error);
     res.status(500).json({ success: false, message: '获取订单列表失败' });
-  }
-});
-
-// 获取今日订单统计
-router.get('/stats/today', async (req, res) => {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const query = `
-      SELECT
-        COUNT(*) as total_orders,
-        COALESCE(SUM(total_price), 0) as total_revenue,
-        COUNT(*) FILTER (WHERE status = 'new') as new_orders,
-        COUNT(*) FILTER (WHERE status = 'done') as completed_orders,
-        COUNT(*) FILTER (WHERE order_type = 'dineIn') as dine_in_orders,
-        COUNT(*) FILTER (WHERE order_type = 'takeout') as takeout_orders
-      FROM orders
-      WHERE created_at >= $1
-    `;
-
-    const result = await pool.query(query, [today]);
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('获取今日统计失败:', error);
-    res.status(500).json({ success: false, message: '获取今日统计失败' });
   }
 });
 
@@ -97,14 +73,6 @@ router.post('/', async (req, res) => {
       items, 
       total_price, 
       customer_phone, 
-// 创建订单
-router.post('/', async (req, res) => {
-  try {
-    const { 
-      table_id, 
-      items, 
-      total_price, 
-      customer_phone, 
       order_type = 'dineIn',
       user_id,
       restaurant_id,
@@ -118,13 +86,28 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: '订单信息不完整' });
     }
 
-    // 验证订单类型
-    if (order_type !== 'dineIn' && order_type !== 'takeout') {
+    // 验证和转换订单类型
+    let orderTypeValue;
+    if (typeof order_type === 'string') {
+      if (order_type === 'dineIn') {
+        orderTypeValue = 0;
+      } else if (order_type === 'takeout') {
+        orderTypeValue = 1;
+      } else {
+        return res.status(400).json({ success: false, message: '无效的订单类型' });
+      }
+    } else if (typeof order_type === 'number') {
+      if ([0, 1, 2].includes(order_type)) {
+        orderTypeValue = order_type;
+      } else {
+        return res.status(400).json({ success: false, message: '无效的订单类型' });
+      }
+    } else {
       return res.status(400).json({ success: false, message: '无效的订单类型' });
     }
 
     // 外卖订单验证
-    if (order_type === 'takeout') {
+    if (orderTypeValue === 1) {
       if (!user_id) {
         return res.status(400).json({ success: false, message: '外卖订单需要用户ID' });
       }
@@ -137,7 +120,7 @@ router.post('/', async (req, res) => {
     }
 
     // 堂食订单验证
-    if (order_type === 'dineIn') {
+    if (orderTypeValue === 0) {
       if (!table_id) {
         return res.status(400).json({ success: false, message: '堂食订单需要桌号' });
       }
@@ -178,7 +161,7 @@ router.post('/', async (req, res) => {
       JSON.stringify(items),
       total_price,
       customer_phone || '',
-      order_type
+      orderTypeValue
     ];
     let placeholders = ['$1', '$2', '$3', '$4'];
     let paramIndex = 5;
@@ -241,7 +224,7 @@ router.post('/', async (req, res) => {
         table_id: table_id,
         total_price: total_price,
         item_count: items.length,
-        order_type: order_type,
+        order_type: orderTypeValue,
         items: items.map(item => ({
           dish_id: item.id,
           quantity: item.quantity,
@@ -260,27 +243,31 @@ router.post('/', async (req, res) => {
     console.error('创建订单验证失败:', error);
     res.status(500).json({ success: false, message: '创建订单验证失败' });
   }
-});    }
+});
 
-    const query = `
-      UPDATE orders
-      SET status = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING *
-    `;
+// 更新订单状态
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
 
-    const result = await pool.query(query, [status, id]);
+    if (!status || (status !== 'new' && status !== 'done')) {
+      return res.status(400).json({ success: false, message: '无效的订单状态' });
+    }
+
+    const result = await pool.query(
+      'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      [status, id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: '订单不存在' });
     }
-    
+
     // 记录订单状态更新事件
-    eventTracker.trackBusinessEvent('order_updated', null, {
+    eventTracker.trackBusinessEvent('order_status_updated', null, {
       order_id: id,
-      old_status: result.rows[0].status,
-      new_status: status,
-      update_type: 'status'
+      new_status: status
     });
 
     res.json({ success: true, data: result.rows[0], message: '订单状态更新成功' });
@@ -290,70 +277,66 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 更新外卖订单配送状态
-router.put('/:id/delivery-status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { delivery_status, actual_delivery_time } = req.body;
-
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'pickedUp', 'delivered', 'cancelled'];
-    if (!delivery_status || !validStatuses.includes(delivery_status)) {
-      return res.status(400).json({ success: false, message: '无效的配送状态' });
-    }
-
-    let query = `
-      UPDATE orders
-      SET delivery_status = $1, updated_at = CURRENT_TIMESTAMP
-    `;
-    const params = [delivery_status];
-
-    if (delivery_status === 'delivered' && actual_delivery_time) {
-      query += ', actual_delivery_time = $2';
-      params.push(actual_delivery_time);
-    } else if (delivery_status === 'delivered') {
-      query += ', actual_delivery_time = CURRENT_TIMESTAMP';
-    }
-
-    query += ' WHERE id = $' + (params.length + 1) + ' RETURNING *';
-    params.push(id);
-
-    const result = await pool.query(query, params);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: '订单不存在' });
-    }
-
-    res.json({ success: true, data: result.rows[0], message: '配送状态更新成功' });
-  } catch (error) {
-    console.error('更新配送状态失败:', error);
-    res.status(500).json({ success: false, message: '更新配送状态失败' });
-  }
-});
-
-// 标记订单为完成
+// 完成订单（快捷操作）
 router.put('/:id/complete', async (req, res) => {
   try {
     const { id } = req.params;
+
     const result = await pool.query(
-      'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      ['done', id]
+      'UPDATE orders SET status = \'done\', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = \'new\' RETURNING *',
+      [id]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: '订单不存在' });
+      return res.status(404).json({ success: false, message: '订单不存在或已完成' });
     }
-    
+
     // 记录订单完成事件
     eventTracker.trackBusinessEvent('order_completed', null, {
-      order_id: id,
-      total_price: result.rows[0].total_price,
-      item_count: JSON.parse(result.rows[0].items).length
+      order_id: id
     });
 
-    res.json({ success: true, data: result.rows[0], message: '订单已完成' });
+    res.json({ success: true, data: result.rows[0], message: '订单完成成功' });
   } catch (error) {
     console.error('完成订单失败:', error);
     res.status(500).json({ success: false, message: '完成订单失败' });
+  }
+});
+
+// 获取今日统计
+router.get('/stats/today', async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // 总订单数
+    const totalOrdersResult = await pool.query(
+      'SELECT COUNT(*) as count FROM orders WHERE created_at >= $1',
+      [today]
+    );
+    
+    // 新订单数
+    const newOrdersResult = await pool.query(
+      'SELECT COUNT(*) as count FROM orders WHERE created_at >= $1 AND status = \'new\'',
+      [today]
+    );
+    
+    // 总营收
+    const revenueResult = await pool.query(
+      'SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= $1',
+      [today]
+    );
+    
+    const stats = {
+      total_orders: parseInt(totalOrdersResult.rows[0].count),
+      new_orders: parseInt(newOrdersResult.rows[0].count),
+      total_revenue: parseFloat(revenueResult.rows[0].total)
+    };
+    
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('获取今日统计失败:', error);
+    res.status(500).json({ success: false, message: '获取今日统计失败' });
   }
 });
 
