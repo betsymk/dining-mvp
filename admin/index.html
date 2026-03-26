@@ -528,6 +528,8 @@
                     <option value="1">上架</option>
                     <option value="0">下架</option>
                 </select>
+                <label class="form-label">库存数量</label>
+                <input type="number" class="form-input" id="dishStock" min="0" placeholder="0表示无限库存">
                 <div class="modal-actions">
                     <button type="button" class="btn" id="cancelDishBtn">取消</button>
                     <button type="submit" class="btn btn-primary">保存</button>
@@ -759,6 +761,7 @@
                             <th>名称</th>
                             <th>价格</th>
                             <th>分类</th>
+                            <th>库存</th>
                             <th>状态</th>
                             <th>操作</th>
                         </tr>
@@ -780,6 +783,7 @@
                         <td>${dish.name}</td>
                         <td>¥${parseFloat(dish.price).toFixed(2)}</td>
                         <td>${categoryText}</td>
+                        <td>${dish.stock === null || dish.stock === 0 ? '无限' : dish.stock}</td>
                         <td class="${statusClass}">${statusText}</td>
                         <td>
                             <button class="btn btn-primary" onclick="editDish(${dish.id})">编辑</button>
@@ -816,6 +820,7 @@
                     document.getElementById('dishImage').value = dish.image_url || '';
                     document.getElementById('dishCategory').value = dish.category;
                     document.getElementById('dishStatus').value = dish.status;
+                    document.getElementById('dishStock').value = dish.stock || '';
                     document.getElementById('dishModal').classList.add('active');
                 }
             } catch (error) {
@@ -854,7 +859,8 @@
                 description: document.getElementById('dishDescription').value,
                 image_url: document.getElementById('dishImage').value,
                 category: parseInt(document.getElementById('dishCategory').value),
-                status: parseInt(document.getElementById('dishStatus').value)
+                status: parseInt(document.getElementById('dishStatus').value),
+                stock: document.getElementById('dishStock').value ? parseInt(document.getElementById('dishStock').value) : null
             };
 
             try {

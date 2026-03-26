@@ -50,9 +50,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: '菜品名称和价格不能为空' });
     }
 
+    const stock = req.body.stock !== undefined ? parseInt(req.body.stock) : 100;
+    
     const query = `
-      INSERT INTO dishes (name, price, description, image_url, category, status)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO dishes (name, price, description, image_url, category, status, stock)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `;
 
@@ -62,7 +64,8 @@ router.post('/', async (req, res) => {
       description || '',
       image_url || '',
       category !== undefined ? category : 0,
-      status !== undefined ? status : 1
+      status !== undefined ? status : 1,
+      stock
     ];
 
     const result = await pool.query(query, values);
@@ -77,12 +80,12 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, price, description, image_url, category, status } = req.body;
+    const { name, price, description, image_url, category, status, stock } = req.body;
 
     const query = `
       UPDATE dishes
-      SET name = $1, price = $2, description = $3, image_url = $4, category = $5, status = $6
-      WHERE id = $7
+      SET name = $1, price = $2, description = $3, image_url = $4, category = $5, status = $6, stock = $7
+      WHERE id = $8
       RETURNING *
     `;
 
@@ -93,6 +96,7 @@ router.put('/:id', async (req, res) => {
       image_url,
       category,
       status,
+      stock !== undefined ? parseInt(stock) : null,
       id
     ];
 
