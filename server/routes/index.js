@@ -6,6 +6,8 @@ const authRoutes = require('./auth');
 const healthRoutes = require('./health');
 const addressesRoutes = require('./addresses');
 const settingsRoutes = require('./settings');
+const marketingRoutes = require('./marketing');
+const exportRoutes = require('./export');
 const { authenticateToken } = require('./auth');
 
 module.exports = (app) => {
@@ -17,6 +19,12 @@ module.exports = (app) => {
 
   // 系统设置路由（需要登录）
   app.use('/api/settings', authenticateToken, settingsRoutes);
+
+  // 营销功能路由（需要登录）
+  app.use('/api/marketing', authenticateToken, marketingRoutes);
+
+  // 数据导出路由（需要登录）
+  app.use('/api/export', authenticateToken, exportRoutes);
 
   // 菜品相关路由（需要登录）
   app.use('/api/dishes', authenticateToken, dishesRoutes);
