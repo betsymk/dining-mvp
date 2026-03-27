@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据分析 - H5餐饮点餐系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .analytics-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            color: #6c757d;
+            font-size: 14px;
+            font-weight: normal;
+        }
+        
+        .summary-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .summary-card .growth {
+            color: #28a745;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chart-controls select,
+        .chart-controls button {
+            padding: 5px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .chart-controls button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        canvas {
+            width: 100% !important;
+            height: 300px !important;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">H5餐饮点餐系统</div>
+            <ul class="nav-menu">
+                <li><a href="index.html">订单管理</a></li>
+                <li><a href="dishes.html">菜品管理</a></li>
+                <li><a href="settings.html">系统设置</a></li>
+                <li><a href="analytics.html" class="active">数据分析</a></li>
+                <li><a href="#" onclick="logout()">退出登录</a></li>
+            </ul>
+        </nav>
+
+        <div class="analytics-container">
+            <h1>数据分析仪表板</h1>
+            
+            <!-- 数据摘要卡片 -->
+            <div class="summary-cards" id="summaryCards">
+                <div class="loading">加载数据摘要...</div>
+            </div>
+            
+            <!-- 销售趋势图表 -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">销售趋势</div>
+                    <div class="chart-controls">
+                        <select id="salesGroupBy">
+                            <option value="day">按天</option>
+                            <option value="week">按周</option>
+                            <option value="month">按月</option>
+                        </select>
+                        <button onclick="refreshSalesChart()">刷新</button>
+                    </div>
+                </div>
+                <canvas id="salesChart"></canvas>
+            </div>
+            
+            <!-- 客户分析图表 -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">客户活跃度</div>
+                    <div class="chart-controls">
+                        <select id="customerStatus">
+                            <option value="all">全部客户</option>
+                            <option value="active">活跃客户</option>
+                            <option value="recent">近期客户</option>
+                            <option value="inactive">不活跃客户</option>
+                        </select>
+                        <button onclick="refreshCustomerChart()">刷新</button>
+                    </div>
+                </div>
+                <canvas id="customerChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('adminToken');
+        let salesChart = null;
+        let customerChart = null;
+
+        // 检查登录状态
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        // 退出登录
+        function logout() {
+            localStorage.removeItem('adminToken');
+            window.location.href = 'login.html';
+        }
+
+        // 显示加载状态
+        function showLoading(elementId, message = '加载中...') {
+            document.getElementById(elementId).innerHTML = `<div class="loading">${message}</div>`;
+        }
+
+        // 显示错误信息
+        function showError(elementId, message) {
+            document.getElementById(elementId).innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // 获取数据摘要
+        async function fetchSummaryData() {
+            try {
+                const response = await fetch('/api/analytics/summary', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    renderSummaryCards(result.data);
+                } else {
+                    showError('summaryCards', '获取数据摘要失败');
+                }
+            } catch (error) {
+                console.error('获取数据摘要错误:', error);
+                showError('summaryCards', '网络错误，请重试');
+            }
+        }
+
+        // 渲染数据摘要卡片
+        function renderSummaryCards(data) {
+            const container = document.getElementById('summaryCards');
+            container.innerHTML = `
+                <div class="summary-card">
+                    <h3>今日订单</h3>
+                    <div class="value">${data.today_orders}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>今日营收</h3>
+                    <div class="value">¥${parseFloat(data.today_revenue).toFixed(2)}</div>
+                    ${data.today_growth_rate ? `<div class="growth">↑${data.today_growth_rate}%</div>` : ''}
+                </div>
+                <div class="summary-card">
+                    <h3>客单价</h3>
+                    <div class="value">¥${parseFloat(data.today_avg_order_value).toFixed(2)}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>活跃客户</h3>
+                    <div class="value">${data.active_customers}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>待处理订单</h3>
+                    <div class="value">${data.pending_orders}</div>
+                </div>
+            `;
+        }
+
+        // 获取销售数据并渲染图表
+        async function fetchSalesData(groupBy = 'day') {
+            try {
+                const params = new URLSearchParams({ groupBy });
+                const response = await fetch(`/api/analytics/sales?${params}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    renderSalesChart(result.data, groupBy);
+                } else {
+                    showError('salesChart', '获取销售数据失败');
+                }
+            } catch (error) {
+                console.error('获取销售数据错误:', error);
+                showError('salesChart', '网络错误，请重试');
+            }
+        }
+
+        // 渲染销售图表
+        function renderSalesChart(data, groupBy) {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            
+            // 销毁现有图表
+            if (salesChart) {
+                salesChart.destroy();
+            }
+            
+            const labels = data.map(item => item.period);
+            const revenueData = data.map(item => parseFloat(item.total_revenue));
+            const ordersData = data.map(item => parseInt(item.total_orders));
+            
+            salesChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.reverse(),
+                    datasets: [
+                        {
+                            label: '营业收入 (¥)',
+                            data: revenueData.reverse(),
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '订单数量',
+                            data: ordersData.reverse(),
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '营业收入 (¥)'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '订单数量'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 获取客户数据并渲染图表
+        async function fetchCustomerData(status = 'all') {
+            try {
+                const params = status !== 'all' ? new URLSearchParams({ activityStatus: status }) : '';
+                const url = params ? `/api/analytics/customers?${params}` : '/api/analytics/customers';
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    renderCustomerChart(result.data);
+                } else {
+                    showError('customerChart', '获取客户数据失败');
+                }
+            } catch (error) {
+                console.error('获取客户数据错误:', error);
+                showError('customerChart', '网络错误，请重试');
+            }
+        }
+
+        // 渲染客户图表
+        function renderCustomerChart(data) {
+            const ctx = document.getElementById('customerChart').getContext('2d');
+            
+            // 销毁现有图表
+            if (customerChart) {
+                customerChart.destroy();
+            }
+            
+            // 统计不同活跃度的客户数量
+            const activityCounts = { active: 0, recent: 0, inactive: 0 };
+            data.forEach(customer => {
+                if (customer.activity_status === 'active') {
+                    activityCounts.active++;
+                } else if (customer.activity_status === 'recent') {
+                    activityCounts.recent++;
+                } else {
+                    activityCounts.inactive++;
+                }
+            });
+            
+            customerChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['活跃客户 (7天内)', '近期客户 (30天内)', '不活跃客户'],
+                    datasets: [{
+                        data: [activityCounts.active, activityCounts.recent, activityCounts.inactive],
+                        backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // 刷新销售图表
+        function refreshSalesChart() {
+            const groupBy = document.getElementById('salesGroupBy').value;
+            fetchSalesData(groupBy);
+        }
+
+        // 刷新客户图表
+        function refreshCustomerChart() {
+            const status = document.getElementById('customerStatus').value;
+            fetchCustomerData(status);
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 加载数据摘要
+            await fetchSummaryData();
+            
+            // 加载销售图表（默认按天）
+            await fetchSalesData('day');
+            
+            // 加载客户图表（默认全部）
+            await fetchCustomerData('all');
+            
+            // 添加事件监听器
+            document.getElementById('salesGroupBy').addEventListener('change', refreshSalesChart);
+            document.getElementById('customerStatus').addEventListener('change', refreshCustomerChart);
+        });
+
+        // 自动刷新数据（每5分钟）
+        setInterval(() => {
+            fetchSummaryData();
+        }, 300000);
+    </script>
+</body>
+</html>
