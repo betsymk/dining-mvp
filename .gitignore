@@ -4,6 +4,17 @@ package-lock.json
 
 # 环境变量
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 敏感配置和证书
+certs/
+*.pem
+*.key
+*.crt
+*.cert
 
 # 日志
 logs/
@@ -28,3 +39,16 @@ tmp/
 temp/
 .cache/
 *.pid
+
+# 备份文件
+backups/
+*.bak
+*.backup
+
+# 数据库转储
+*.sql.gz
+*.dump
+
+# 调试文件
+.debug
+.profile
